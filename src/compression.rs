@@ -1,58 +1,32 @@
 use std::slice;
 use std::arch::asm;
 pub fn compress(input: &[u8], output: &mut [u8]) -> usize {
-    unsafe {
-        let mut input_ptr = input.as_ptr();
-        let mut input_len = input.len();
-        let mut output_ptr = output.as_mut_ptr();
-        let initial_output_ptr = output_ptr;
+    let mut input_index = 0;
+    let mut output_index = 0;
 
-        asm!(
-            "xor rcx, rcx",            // Clear run length counter
-            "test rsi, rsi",
-            "je 2f",                   // If input length is 0, jump to done
+    while input_index < input.len() {
+        let byte = input[input_index];
+        let mut run_length = 1;
 
-            "3:",                      // Loop condition check
-            "cmp rsi, 0",
-            "je 5f",                   // If input length is 0, jump to final done
+        // Count the run length
+        while input_index + run_length < input.len() && run_length < u8::MAX as usize && input[input_index + run_length] == byte {
+            run_length += 1;
+        }
 
-            "mov al, [rdi]",           // Load current byte
-            "mov bl, al",              // Store current byte in bl for comparison
-            "inc rdi",                 // Move to next byte
-            "dec rsi",                 // Decrement input length
-            "xor rcx, rcx",            // Clear run length counter
+        // Write the byte and run length to the output
+        output[output_index] = byte;
+        output[output_index + 1] = run_length as u8;
+        output_index += 2;
 
-            "4:",                      // Count run length
-            "inc rcx",                 // Increment run length
-            "cmp rsi, 0",              // Check if input length is 0
-            "je 6f",                   // If end of input, jump to write_output
-
-            "cmp bl, [rdi]",           // Compare stored byte with next byte
-            "jne 6f",                  // If different, jump to write_output
-            "inc rdi",                 // Move to next byte
-            "dec rsi",                 // Decrement input length
-            "jmp 4b",                  // Repeat counting
-
-            "6:",                      // Write output
-            "mov [rdx], bl",           // Write byte to output
-            "inc rdx",
-            "mov [rdx], cl",           // Write run length to output
-            "inc rdx",
-
-            "jmp 3b",                  // Continue loop
-
-            "2:",                      // Done
-            "5:",                      // Final done
-            inout("rdi") input_ptr,
-            inout("rsi") input_len,
-            inout("rdx") output_ptr,
-            out("al") _, out("bl") _, out("cl") _, options(nostack, preserves_flags)
-        );
-
-        let output_len = output_ptr.offset_from(initial_output_ptr) as usize;
-        output_len
+        // Move to the next segment
+        input_index += run_length;
     }
+
+    output_index
 }
+
+
+
 pub fn decompress(input: &[u8], output: &mut [u8]) -> usize {
     let mut input_index = 0;
     let mut output_index = 0;
